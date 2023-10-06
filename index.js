@@ -34,7 +34,7 @@ io.on("connection", (socket) => {
     socket.on('answer_message', (data) => {
         const user = getCurrentUser(socket.id)
 
-        io.to(user.room).emit('answer_message_received', { username: user.username, message: data.message })
+        io.to(user.room).emit('answer_message_received', { username: user.username, message: data.message , score : data.score})
     })
 
     socket.on("on_start", async () => {
@@ -46,7 +46,6 @@ io.on("connection", (socket) => {
         for (let i = 0; i < rdnb.length; i++) {
             songs_to_send.push(songs[rdnb[i]])
         }
-        console.log(songs_to_send);
         io.to(user.room).emit('game_started', songs_to_send)
     })
 
@@ -54,6 +53,11 @@ io.on("connection", (socket) => {
         const user = getCurrentUser(socket.id)
 
         io.to(user.room).emit('chat_message_received', { user: user.username, message: data.message })
+    })
+
+    socket.on("good_answer", (d) => {
+        const user = getCurrentUser(socket.id)
+        io.to(user.room).emit("send_score", {username :d.username ,score : d.score})
     })
 
     socket.on("disconnect", () => {
