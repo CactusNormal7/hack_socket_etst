@@ -3,6 +3,9 @@ const app = express()
 const http = require("http")
 const { Server } = require("socket.io")
 const cors = require("cors")
+const { getCurrentUser, userJoin, userLeave, getRoomUsers } = require("./users")
+const { generateUniqueRandomNumbers } = require('./utils')
+
 
 app.use(cors())
 
@@ -15,33 +18,52 @@ const io = new Server(server, {
     }
 })
 
-
-let users = {}
-
 io.on("connection", (socket) => {
-    // console.log(`User connected ${socket.id}`);
-    let current_room = 0
-    socket.on('room_number', (room) => {
-        socket.join(room.room)
-        current_room = room.room
-        io.to(current_room).emit('user_list', Object.values(users))
+    socket.on('join_room', (data) => {
+
+        const user = userJoin(socket.id, data.username, data.room)
+
+        socket.join(user.room)
+        socket.broadcast.to(user.room).emit('console_message', `${user.username} has joined the ${user.room} room`)
+
+        //send all users infos
+        io.to(user.room).emit('users_infos', { room: user.room, users: getRoomUsers(user.room) })
+        console.log(getRoomUsers(user.room));
     })
 
-    socket.on("joined_username", (data) => {
-        users[socket.id] = data
-        console.log(users);
-        io.to(current_room).emit('user_list', Object.values(users))
+    socket.on('answer_message', (data) => {
+        const user = getCurrentUser(socket.id)
+
+        io.to(user.room).emit('answer_message_received', { username: user.username, message: data.message })
     })
 
-    socket.on('send_message', (data) => {
-        console.log(users);
-        socket.broadcast.to(current_room).emit("receive_message", { message: data.message, username: data.username })
+    socket.on("on_start", async () => {
+        const user = getCurrentUser(socket.id)
+        const da = await fetch('https://hackathon-api-fiq7.onrender.com/api/getAll')
+        const songs = await da.json()
+        let rdnb = generateUniqueRandomNumbers(5, 1, 30)
+        let songs_to_send = []
+        for (let i = 0; i < rdnb.length; i++) {
+            songs_to_send.push(songs[rdnb[i]])
+        }
+        console.log(songs_to_send);
+        io.to(user.room).emit('game_started', songs_to_send)
+    })
+
+    socket.on('chat_message', (data) => {
+        const user = getCurrentUser(socket.id)
+
+        io.to(user.room).emit('chat_message_received', { user: user.username, message: data.message })
     })
 
     socket.on("disconnect", () => {
-        delete users[socket.id]
-        console.log(users);
-        io.to(current_room).emit('user_list', Object.values(users))
+        const user = userLeave(socket.id)
+
+        if (user) {
+            io.to(user.room).emit('console_message', `${user.username} left the chat`)
+
+            io.to(user.room).emit('users_infos', { room: user.room, users: getRoomUsers(user.room) })
+        }
     })
 })
 
